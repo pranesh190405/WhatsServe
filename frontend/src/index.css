@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+/* ── Custom design tokens ── */
+@theme {
+  --color-surface: #0f1117;
+  --color-surface-alt: #161822;
+  --color-surface-raised: #1c1f2e;
+  --color-surface-hover: #232740;
+  --color-border: #2a2d3e;
+  --color-border-subtle: #1e2131;
+  --color-text-primary: #f0f2f5;
+  --color-text-secondary: #8b8fa3;
+  --color-text-muted: #5c6070;
+  --color-accent: #6c5ce7;
+  --color-accent-soft: rgba(108, 92, 231, 0.15);
+  --color-accent-hover: #7d6ff0;
+  --color-success: #00d68f;
+  --color-success-soft: rgba(0, 214, 143, 0.12);
+  --color-warning: #ffaa00;
+  --color-warning-soft: rgba(255, 170, 0, 0.12);
+  --color-danger: #ff3d71;
+  --color-danger-soft: rgba(255, 61, 113, 0.12);
+  --color-info: #0095ff;
+  --color-info-soft: rgba(0, 149, 255, 0.12);
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+/* ── Base ── */
+html {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+/* ── Utilities ── */
+.glass {
+  background: rgba(22, 24, 34, 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--color-border);
+}
+
+.card {
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 20px var(--color-accent-soft);
+}
+
+/* ── Animations ── */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-in-left {
+  from { opacity: 0; transform: translateX(-16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 8px var(--color-accent-soft); }
+  50%      { box-shadow: 0 0 20px rgba(108, 92, 231, 0.3); }
+}
