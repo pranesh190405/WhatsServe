@@ -12,8 +12,13 @@ services:
       - NODE_ENV=production
       - WEBHOOK_URL=http://localhost:5678/
       - GENERIC_TIMEZONE=Asia/Kolkata
+      # Django backend URL for n8n HTTP Request nodes
+      - DJANGO_API_URL=http://host.docker.internal:8000/api/v1
     volumes:
       - n8n_data:/home/node/.n8n
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
 
 volumes:
   n8n_data:
