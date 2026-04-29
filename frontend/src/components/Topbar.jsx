@@ -1,4 +1,4 @@
-export default function Topbar() {
+export default function Topbar({ activePage }) {
   return (
     <header
       id="topbar"
@@ -12,7 +12,7 @@ export default function Topbar() {
       {/* Left — Page title */}
       <div className="flex items-center gap-3">
         <h1 className="text-lg font-semibold text-[var(--color-text-primary)]">
-          Dashboard
+          {activePage || 'Dashboard'}
         </h1>
         <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--color-success-soft)] text-[var(--color-success)]">
           Live

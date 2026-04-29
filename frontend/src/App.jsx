@@ -1,10 +1,24 @@
+import { useState } from 'react'
 import DashboardLayout from './components/DashboardLayout'
 import Dashboard from './components/Dashboard'
+import JobsTable from './components/JobsTable'
 
 function App() {
+  const [activePage, setActivePage] = useState('Dashboard')
+
+  const renderPage = () => {
+    switch (activePage) {
+      case 'Jobs':
+        return <JobsTable />
+      case 'Dashboard':
+      default:
+        return <Dashboard onNavigate={setActivePage} />
+    }
+  }
+
   return (
-    <DashboardLayout>
-      <Dashboard />
+    <DashboardLayout activePage={activePage} onNavigate={setActivePage}>
+      {renderPage()}
     </DashboardLayout>
   )
 }

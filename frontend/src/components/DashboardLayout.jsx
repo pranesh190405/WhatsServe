@@ -1,12 +1,12 @@
 import Sidebar from './Sidebar'
 import Topbar from './Topbar'
 
-export default function DashboardLayout({ children }) {
+export default function DashboardLayout({ children, activePage, onNavigate }) {
   return (
     <div className="min-h-screen bg-[var(--color-surface)] flex">
-      <Sidebar />
+      <Sidebar activePage={activePage} onNavigate={onNavigate} />
       <div className="flex-1 ml-[240px] flex flex-col transition-all duration-300">
-        <Topbar />
+        <Topbar activePage={activePage} />
         <main className="flex-1 p-6 overflow-y-auto">
           {children}
         </main>
