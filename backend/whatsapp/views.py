@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
-TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER", "")  # e.g. whatsapp:+14155238886
+TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER", "+14155238886")  # e.g. whatsapp:+14155238886
 
 # Build client lazily to avoid crash if credentials not yet set
 _twilio_client = None
@@ -30,6 +30,8 @@ def _get_client():
         _twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
     return _twilio_client
 
+
+import re
 
 # ──────────────────────────────────────────────────────────────
 # Message Templates
@@ -44,10 +46,15 @@ WELCOME_MESSAGE = (
     "Reply with *1*, *2*, *3*, or *4* to get started."
 )
 
-BOOKING_ASK_ISSUE = (
+BOOKING_ASK_CATEGORY = (
     "🔧 *Book a Service*\n\n"
-    "Please describe the issue with your appliance.\n"
-    "For example: _AC not cooling_, _TV screen blinking_, _Washing machine not draining_"
+    "What type of appliance needs service?\n"
+    "_(e.g., Air Conditioner, Refrigerator, Washing Machine, TV)_"
+)
+
+BOOKING_ASK_ISSUE = (
+    "Great. Please describe the exact issue you're facing.\n"
+    "_(e.g., Not cooling, Screen blinking, Making a loud noise)_"
 )
 
 WARRANTY_ASK_SERIAL = (
@@ -58,7 +65,7 @@ WARRANTY_ASK_SERIAL = (
 
 TRACK_ASK_JOB_ID = (
     "📋 *Track Your Request*\n\n"
-    "Please send your *Job ID*.\n"
+    "Please send your *Job ID* (or type *ALL* to see your recent requests).\n"
     "It looks like: `JOB-20260429-0001`"
 )
 
@@ -113,6 +120,14 @@ def send_whatsapp_message(to, text):
 # Conversation Flow Handlers
 # ──────────────────────────────────────────────────────────────
 
+def _handle_booking_category(phone, text, conv_state):
+    """User sent their appliance category."""
+    conv_state.context["category"] = text.strip()
+    conv_state.state = "awaiting_issue"
+    conv_state.save()
+    send_whatsapp_message(phone, BOOKING_ASK_ISSUE)
+
+
 def _handle_booking_issue(phone, text, conv_state):
     """User sent their issue description — create the job."""
     from jobs.models import Job
@@ -127,9 +142,11 @@ def _handle_booking_issue(phone, text, conv_state):
         },
     )
 
+    category = conv_state.context.get("category", "General Appliance")
+
     # Create the job
     job = Job(
-        title=f"Service Request — {text[:80]}",
+        title=f"{category[:40]} Repair",
         description=text,
         customer=customer,
     )
@@ -149,49 +166,82 @@ def _handle_booking_issue(phone, text, conv_state):
 
 
 def _handle_warranty_check(phone, serial, conv_state):
-    """User sent a serial number — look up warranty."""
+    """User sent a serial number — look up warranty using fuzzy search."""
     from jobs.models import Warranty
 
-    conv_state.reset()
+    # Clean serial (alphanumeric only, uppercase)
+    cleaned_serial = re.sub(r'[^A-Za-z0-9]', '', serial).upper()
 
     try:
-        warranty = Warranty.objects.get(serial_number__iexact=serial.strip())
+        warranty = Warranty.objects.get(serial_number__iexact=cleaned_serial)
         if warranty.is_valid:
+            conv_state.state = "awaiting_auto_book"
+            conv_state.context["product_name"] = warranty.product_name
+            conv_state.save()
+            
             reply = (
                 f"🛡️ *Warranty Status: ✅ Valid*\n\n"
                 f"Product: {warranty.product_name}\n"
                 f"Serial: `{warranty.serial_number}`\n"
-                f"Purchased: {warranty.purchase_date.strftime('%d %b %Y')}\n"
                 f"Expires: {warranty.expiry_date.strftime('%d %b %Y')}\n\n"
-                f"Your product is covered under warranty."
+                f"Would you like to book a *FREE service visit* for this product right now? Reply *YES* or *NO*."
             )
         else:
+            conv_state.reset()
             reply = (
                 f"🛡️ *Warranty Status: ❌ Expired*\n\n"
                 f"Product: {warranty.product_name}\n"
                 f"Serial: `{warranty.serial_number}`\n"
                 f"Expired on: {warranty.expiry_date.strftime('%d %b %Y')}\n\n"
-                f"Your warranty has expired. Service charges may apply."
+                f"Your warranty has expired. Service charges may apply. Reply *1* to book a service anyway."
             )
     except Warranty.DoesNotExist:
+        conv_state.reset()
         reply = (
             f"🛡️ *Warranty Status: ⚠️ Not Found*\n\n"
-            f"No warranty record found for serial number `{serial}`.\n\n"
-            f"Please double-check the serial number or contact our store."
+            f"No warranty record found for serial number `{cleaned_serial}`.\n\n"
+            f"Please double-check the serial number on your appliance."
         )
 
     send_whatsapp_message(phone, reply)
 
 
-def _handle_track_request(phone, job_id_text, conv_state):
-    """User sent a Job ID — look up the job status."""
+def _handle_auto_book(phone, text, conv_state):
+    """User replies YES/NO to auto-booking after a valid warranty check."""
+    if text.strip().upper() == "YES":
+        product_name = conv_state.context.get("product_name", "Appliance under Warranty")
+        conv_state.context["category"] = product_name
+        conv_state.state = "awaiting_issue"
+        conv_state.save()
+        send_whatsapp_message(phone, f"Booking service for your {product_name}.\n\n" + BOOKING_ASK_ISSUE)
+    else:
+        conv_state.reset()
+        send_whatsapp_message(phone, "No problem! Reply *hi* anytime to return to the main menu.")
+
+
+def _handle_track_request(phone, text, conv_state):
+    """User sent a Job ID or 'ALL' — look up the job status."""
     from jobs.models import Job
 
     conv_state.reset()
+    clean_text = text.strip().upper()
+
+    if clean_text == "ALL":
+        jobs = Job.objects.filter(customer__phone_number=phone.replace("whatsapp:", "").replace("+", "")).order_by('-created_at')[:5]
+        if not jobs:
+            send_whatsapp_message(phone, "📋 No past or open service requests found for your number.")
+            return
+            
+        reply = "📋 *Your Recent Requests:*\n\n"
+        for j in jobs:
+            reply += f"• `{j.job_id}` — {j.get_status_display()}\n"
+        reply += "\nReply with a specific Job ID (e.g., `JOB-XXXXX`) for full details."
+        send_whatsapp_message(phone, reply)
+        return
 
     try:
         job = Job.objects.select_related("customer", "technician").get(
-            job_id__iexact=job_id_text.strip()
+            job_id__iexact=clean_text
         )
         technician_info = (
             f"Technician: {job.technician.first_name or job.technician.username}"
@@ -209,8 +259,8 @@ def _handle_track_request(phone, job_id_text, conv_state):
     except Job.DoesNotExist:
         reply = (
             f"📋 *Job Not Found*\n\n"
-            f"No service request found for `{job_id_text}`.\n\n"
-            f"Please check the Job ID and try again."
+            f"No service request found for `{clean_text}`.\n\n"
+            f"Please check the Job ID and try again, or type *ALL*."
         )
 
     send_whatsapp_message(phone, reply)
@@ -224,16 +274,6 @@ def _handle_track_request(phone, job_id_text, conv_state):
 class WhatsAppWebhookView(APIView):
     """
     Twilio WhatsApp Webhook.
-
-    Twilio sends POST requests here when a message arrives.
-    The payload contains form-encoded data with keys like:
-        From, Body, To, MessageSid, etc.
-
-    This view:
-    1. Extracts the sender phone and message body.
-    2. Looks up or creates a ConversationState for the user.
-    3. Routes based on the user's current state (idle, awaiting_issue, etc.)
-    4. Responds via Twilio API.
     """
 
     authentication_classes = []
@@ -301,19 +341,25 @@ class WhatsAppWebhookView(APIView):
 
         # Route based on current conversation state
 
-        if conv_state.state == "awaiting_issue":
+        if conv_state.state == "awaiting_category":
+            _handle_booking_category(phone, body, conv_state)
+
+        elif conv_state.state == "awaiting_issue":
             _handle_booking_issue(phone, body, conv_state)
 
         elif conv_state.state == "awaiting_serial":
             _handle_warranty_check(phone, body, conv_state)
 
+        elif conv_state.state == "awaiting_auto_book":
+            _handle_auto_book(phone, body, conv_state)
+
         elif conv_state.state == "awaiting_job_id":
             _handle_track_request(phone, body, conv_state)
 
         elif body == "1":
-            conv_state.state = "awaiting_issue"
+            conv_state.state = "awaiting_category"
             conv_state.save()
-            send_whatsapp_message(phone, BOOKING_ASK_ISSUE)
+            send_whatsapp_message(phone, BOOKING_ASK_CATEGORY)
 
         elif body == "2":
             conv_state.state = "awaiting_serial"

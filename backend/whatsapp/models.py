@@ -11,8 +11,10 @@ class ConversationState(models.Model):
 
     STATE_CHOICES = (
         ("idle", "Idle — waiting for menu selection"),
+        ("awaiting_category", "Awaiting appliance category (Book Service)"),
         ("awaiting_issue", "Awaiting issue description (Book Service)"),
         ("awaiting_serial", "Awaiting serial number (Check Warranty)"),
+        ("awaiting_auto_book", "Awaiting YES/NO to auto-book after warranty"),
         ("awaiting_job_id", "Awaiting Job ID (Track Request)"),
     )
 
