@@ -26,6 +26,9 @@ INSTALLED_APPS = [
     "corsheaders",
     # Local
     "feedback",
+    "users",
+    "jobs",
+    "whatsapp",
 ]
 
 MIDDLEWARE = [
@@ -87,6 +90,8 @@ STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+AUTH_USER_MODEL = "users.User"
 
 # CORS
 CORS_ALLOWED_ORIGINS = os.getenv(

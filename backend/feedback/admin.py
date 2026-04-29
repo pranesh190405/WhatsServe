@@ -1,13 +1,5 @@
 from django.contrib import admin
-from .models import Job, Feedback
-
-
-@admin.register(Job)
-class JobAdmin(admin.ModelAdmin):
-    list_display = ("id", "title", "created_at")
-    search_fields = ("title",)
-    list_filter = ("created_at",)
-
+from .models import Feedback
 
 @admin.register(Feedback)
 class FeedbackAdmin(admin.ModelAdmin):

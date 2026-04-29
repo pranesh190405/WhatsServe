@@ -2,25 +2,6 @@ from django.db import models
 from django.conf import settings
 from django.core.validators import MinValueValidator, MaxValueValidator
 
-
-class Job(models.Model):
-    """
-    Minimal stub for the Job model.
-    Dev 1 owns the full Job model — this stub satisfies the FK constraint
-    and will be replaced/migrated when the full model lands.
-    """
-
-    title = models.CharField(max_length=255)
-    description = models.TextField(blank=True, default="")
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["-created_at"]
-
-    def __str__(self):
-        return self.title
-
-
 class Feedback(models.Model):
     """
     Customer/user feedback linked to a specific job.
@@ -34,7 +15,7 @@ class Feedback(models.Model):
         related_name="feedbacks",
     )
     job = models.ForeignKey(
-        Job,
+        "jobs.Job",
         on_delete=models.CASCADE,
         related_name="feedbacks",
     )
