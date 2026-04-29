@@ -153,60 +153,28 @@ export default function Dashboard({ onNavigate }) {
         </div>
       )}
 
-      {/* Bottom Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* System Status */}
-        <div className="lg:col-span-2 card p-6">
-          <h3 className="text-lg font-semibold mb-4">System Status</h3>
-          <div className="space-y-3">
-            {[
-              { name: 'Django Backend', status: 'Running', ok: true, port: ':8000' },
-              { name: 'React Frontend', status: 'Running', ok: true, port: ':5173' },
-              { name: 'PostgreSQL Database', status: 'Connected', ok: true, port: ':5432' },
-              { name: 'Twilio WhatsApp', status: TWILIO_STATUS(), ok: TWILIO_STATUS() === 'Connected', port: 'Sandbox' },
-            ].map((svc, i) => (
-              <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border-subtle)]">
-                <div className="flex items-center gap-3">
-                  <span className={`w-2.5 h-2.5 rounded-full ${svc.ok ? 'bg-[var(--color-success)]' : 'bg-[var(--color-warning)]'}`} />
-                  <span className="text-sm font-medium text-[var(--color-text-primary)]">{svc.name}</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-mono text-[var(--color-text-muted)]">{svc.port}</span>
-                  <span className={`text-xs font-medium ${svc.ok ? 'text-[var(--color-success)]' : 'text-[var(--color-warning)]'}`}>
-                    {svc.status}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="card p-6">
-          <h3 className="text-lg font-semibold mb-4">Quick Actions</h3>
-          <div className="space-y-3">
+      {/* Bottom Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Quick Actions Grid */}
+        <div className="card p-6 lg:col-span-2">
+          <h3 className="text-lg font-semibold mb-4">Support Team Actions</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {[
               { label: 'Manage Jobs', desc: 'View & assign service requests', page: 'Jobs', icon: '📋' },
-              { label: 'Technicians', desc: 'Add or manage technician roster', page: 'Technicians', icon: '👨‍🔧' },
-              { label: 'Live Chat', desc: `${openChats} open conversation${openChats !== 1 ? 's' : ''}`, page: 'Live Chat', icon: '💬' },
-              { label: 'Feedback & Reports', desc: 'Review customer ratings', page: 'Feedback', icon: '⭐' },
-              { label: 'Django Admin', desc: 'Full database management', page: null, url: 'http://localhost:8000/admin/', icon: '🔧' },
+              { label: 'Technicians', desc: `Manage ${techCount} active technicians`, page: 'Technicians', icon: '👨‍🔧' },
+              { label: 'Live Chat', desc: `${openChats} customer${openChats !== 1 ? 's' : ''} waiting`, page: 'Live Chat', icon: '💬' },
+              { label: 'Feedback & Reports', desc: 'Review ratings & incidents', page: 'Feedback', icon: '⭐' },
             ].map((action, i) => (
               <button
                 key={i}
-                onClick={() => {
-                  if (action.page) onNavigate?.(action.page)
-                  else if (action.url) window.open(action.url, '_blank')
-                }}
-                className="flex items-center gap-3 p-3 rounded-lg border border-[var(--color-border-subtle)] hover:border-[var(--color-accent)] transition-all duration-200 cursor-pointer bg-[var(--color-surface)] w-full text-left group"
+                onClick={() => onNavigate?.(action.page)}
+                className="flex flex-col items-start p-4 rounded-xl border border-[var(--color-border-subtle)] hover:border-[var(--color-accent)] hover:bg-[var(--color-surface-hover)] transition-all duration-200 cursor-pointer bg-[var(--color-surface)] text-left group"
               >
-                <div className="w-10 h-10 rounded-full bg-[var(--color-accent-soft)] flex items-center justify-center shrink-0 text-lg group-hover:scale-110 transition-transform duration-200">
+                <div className="w-12 h-12 rounded-2xl bg-[var(--color-accent-soft)] flex items-center justify-center shrink-0 text-2xl group-hover:scale-110 transition-transform duration-200 mb-3">
                   {action.icon}
                 </div>
-                <div>
-                  <h4 className="text-sm font-medium text-[var(--color-text-primary)]">{action.label}</h4>
-                  <p className="text-xs text-[var(--color-text-muted)] mt-0.5">{action.desc}</p>
-                </div>
+                <h4 className="text-base font-medium text-[var(--color-text-primary)]">{action.label}</h4>
+                <p className="text-sm text-[var(--color-text-muted)] mt-1">{action.desc}</p>
               </button>
             ))}
           </div>
@@ -214,9 +182,4 @@ export default function Dashboard({ onNavigate }) {
       </div>
     </div>
   )
-}
-
-function TWILIO_STATUS() {
-  // Simple runtime check — in real production you'd ping the API
-  return 'Configured'
 }
