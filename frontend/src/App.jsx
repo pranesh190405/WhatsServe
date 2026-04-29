@@ -4,6 +4,7 @@ import Dashboard from './components/Dashboard'
 import JobsTable from './components/JobsTable'
 import TechniciansPage from './components/TechniciansPage'
 import FeedbackReportsPage from './components/FeedbackReportsPage'
+import LiveChatPage from './components/LiveChatPage'
 
 function App() {
   const [activePage, setActivePage] = useState('Dashboard')
@@ -14,6 +15,8 @@ function App() {
         return <JobsTable />
       case 'Technicians':
         return <TechniciansPage />
+      case 'Live Chat':
+        return <LiveChatPage />
       case 'Feedback':
         return <FeedbackReportsPage />
       case 'Dashboard':

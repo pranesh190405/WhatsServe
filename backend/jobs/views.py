@@ -5,6 +5,7 @@ from rest_framework.response import Response
 
 from users.models import User, TechnicianProfile
 from feedback.models import Feedback
+from whatsapp.views import send_whatsapp_message
 from .models import Job, Warranty, JobAssignment, TechnicianReport, ConversationSession, ChatMessage
 from .serializers import (
     JobCreateSerializer,
@@ -150,6 +151,18 @@ class AssignTechnicianView(APIView):
         job.technician = technician
         job.status = "in_progress"
         job.save()
+
+        # Notify technician via WhatsApp
+        tech_phone = technician.phone_number or technician.whatsapp_id
+        if tech_phone:
+            message = (
+                f"🔧 *New Job Assigned: {job.job_id}*\n\n"
+                f"Title: {job.title}\n"
+                f"Customer: {job.customer.username}\n\n"
+                f"You have 30 minutes to accept or reject this assignment."
+            )
+            # In a real system, you'd add quick reply buttons. For now, text.
+            send_whatsapp_message(tech_phone, message)
 
         detail = JobAssignmentSerializer(assignment)
         return Response(
@@ -500,6 +513,15 @@ class SendMessageView(APIView):
             sender=request.user if request.user.is_authenticated else None,
             content=content,
         )
+
+        # Notify customer via WhatsApp if agent sent it
+        if sender_type == "agent":
+            customer = conversation.customer
+            cust_phone = customer.phone_number or customer.whatsapp_id
+            if cust_phone:
+                # We prefix with a small emoji so customer knows it's an agent.
+                wa_msg = f"🧑‍💻 *Support Team:*\n{content}"
+                send_whatsapp_message(cust_phone, wa_msg)
 
         # Update conversation status if needed
         if conversation.status == "open":
