@@ -1,27 +1,30 @@
 @import "tailwindcss";
 
-/* ── Custom design tokens ── */
+/* ── Custom design tokens (Light Theme) ── */
 @theme {
-  --color-surface: #0f1117;
-  --color-surface-alt: #161822;
-  --color-surface-raised: #1c1f2e;
-  --color-surface-hover: #232740;
-  --color-border: #2a2d3e;
-  --color-border-subtle: #1e2131;
-  --color-text-primary: #f0f2f5;
-  --color-text-secondary: #8b8fa3;
-  --color-text-muted: #5c6070;
-  --color-accent: #6c5ce7;
-  --color-accent-soft: rgba(108, 92, 231, 0.15);
-  --color-accent-hover: #7d6ff0;
-  --color-success: #00d68f;
-  --color-success-soft: rgba(0, 214, 143, 0.12);
-  --color-warning: #ffaa00;
-  --color-warning-soft: rgba(255, 170, 0, 0.12);
-  --color-danger: #ff3d71;
-  --color-danger-soft: rgba(255, 61, 113, 0.12);
-  --color-info: #0095ff;
-  --color-info-soft: rgba(0, 149, 255, 0.12);
+  --color-surface: #f8fafc;        /* Slate 50 - Background */
+  --color-surface-alt: #ffffff;    /* White - Cards/Modals */
+  --color-surface-raised: #ffffff;
+  --color-surface-hover: #f1f5f9;  /* Slate 100 - Hover */
+  --color-border: #e2e8f0;         /* Slate 200 - Borders */
+  --color-border-subtle: #f1f5f9;  /* Slate 100 - Subtle Borders */
+  --color-text-primary: #0f172a;   /* Slate 900 - Primary Text */
+  --color-text-secondary: #475569; /* Slate 600 - Secondary Text */
+  --color-text-muted: #94a3b8;     /* Slate 400 - Muted Text */
+  
+  --color-accent: #4f46e5;         /* Indigo 600 */
+  --color-accent-soft: rgba(79, 70, 229, 0.1);
+  --color-accent-hover: #4338ca;   /* Indigo 700 */
+  
+  --color-success: #10b981;        /* Emerald 500 */
+  --color-success-soft: rgba(16, 185, 129, 0.15);
+  --color-warning: #f59e0b;        /* Amber 500 */
+  --color-warning-soft: rgba(245, 158, 11, 0.15);
+  --color-danger: #ef4444;         /* Red 500 */
+  --color-danger-soft: rgba(239, 68, 68, 0.15);
+  --color-info: #0ea5e9;           /* Sky 500 */
+  --color-info-soft: rgba(14, 165, 233, 0.15);
+  
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 }
@@ -48,16 +51,16 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-border);
+  background: #cbd5e1; /* Slate 300 */
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-text-muted);
+  background: #94a3b8; /* Slate 400 */
 }
 
 /* ── Utilities ── */
 .glass {
-  background: rgba(22, 24, 34, 0.65);
+  background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--color-border);
@@ -67,12 +70,13 @@ body {
   background: var(--color-surface-alt);
   border: 1px solid var(--color-border);
   border-radius: 12px;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .card:hover {
   border-color: var(--color-accent);
-  box-shadow: 0 0 20px var(--color-accent-soft);
+  box-shadow: 0 4px 12px var(--color-accent-soft);
 }
 
 /* ── Animations ── */
