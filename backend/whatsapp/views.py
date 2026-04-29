@@ -6,6 +6,7 @@ from django.utils.decorators import method_decorator
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status as http_status
+from rest_framework.parsers import FormParser, MultiPartParser
 from twilio.rest import Client
 from twilio.request_validator import RequestValidator
 
@@ -278,15 +279,19 @@ class WhatsAppWebhookView(APIView):
 
     authentication_classes = []
     permission_classes = []
+    parser_classes = [FormParser, MultiPartParser]
 
     def post(self, request):
-        # Twilio sends form-encoded data
-        data = request.data if isinstance(request.data, dict) else request.POST
+        # Twilio sends form-encoded data.
+        # DRF parses it into request.data (could be QueryDict or dict).
+        # Fall back to request.POST if request.data is empty.
+        data = request.data or request.POST
 
         phone = data.get("From", "").strip()
         body = data.get("Body", "").strip()
 
         if not phone or not body:
+            logger.warning("Webhook called with empty From=%r or Body=%r", phone, body)
             return Response({"status": "ignored"}, status=http_status.HTTP_200_OK)
 
         logger.info("WhatsApp message from %s: %s", phone, body)
