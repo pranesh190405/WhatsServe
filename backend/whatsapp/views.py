@@ -39,8 +39,9 @@ WELCOME_MESSAGE = (
     "How can we help you today?\n\n"
     "1️⃣ Book a Service\n"
     "2️⃣ Check Warranty\n"
-    "3️⃣ Track Your Request\n\n"
-    "Reply with *1*, *2*, or *3* to get started."
+    "3️⃣ Track Your Request\n"
+    "4️⃣ Talk to Agent\n\n"
+    "Reply with *1*, *2*, *3*, or *4* to get started."
 )
 
 BOOKING_ASK_ISSUE = (
@@ -63,10 +64,11 @@ TRACK_ASK_JOB_ID = (
 
 INVALID_INPUT = (
     "❓ Sorry, I didn't understand that.\n\n"
-    "Please reply with *1*, *2*, or *3* to choose an option:\n\n"
+    "Please reply with *1*, *2*, *3*, or *4* to choose an option:\n\n"
     "1️⃣ Book a Service\n"
     "2️⃣ Check Warranty\n"
-    "3️⃣ Track Your Request"
+    "3️⃣ Track Your Request\n"
+    "4️⃣ Talk to Agent"
 )
 
 
@@ -249,53 +251,101 @@ class WhatsAppWebhookView(APIView):
 
         logger.info("WhatsApp message from %s: %s", phone, body)
 
+        from users.models import User
+        from jobs.models import ConversationSession, ChatMessage
+
+        # Ensure we have the customer record
+        customer, _ = User.objects.get_or_create(
+            phone_number=phone.replace("whatsapp:", ""),
+            defaults={
+                "username": phone.replace("whatsapp:", "").replace("+", ""),
+                "role": "customer",
+            },
+        )
+
+        # ── 1. Intercept for Active Live Chat ──────────────────────
+        active_chat = ConversationSession.objects.filter(
+            customer=customer,
+            status__in=["open", "assigned", "in_progress"]
+        ).first()
+
+        if active_chat:
+            if body.strip().upper() == "EXIT":
+                active_chat.status = "resolved"
+                active_chat.save()
+                ChatMessage.objects.create(
+                    conversation=active_chat,
+                    sender_type="system",
+                    content="Customer closed the conversation."
+                )
+                send_whatsapp_message(phone, "✅ You have left the chat. Have a great day!")
+                send_whatsapp_message(phone, WELCOME_MESSAGE)
+                return Response({"status": "chat_exited"}, status=http_status.HTTP_200_OK)
+
+            # Route message directly to the live chat session instead of bot
+            ChatMessage.objects.create(
+                conversation=active_chat,
+                sender_type="customer",
+                sender=customer,
+                content=body
+            )
+            return Response({"status": "routed_to_chat"}, status=http_status.HTTP_200_OK)
+
+        # ── 2. Normal Bot Flow ─────────────────────────────────────
+
         # Get or create conversation state for this phone number
         conv_state, _ = ConversationState.objects.get_or_create(
             phone_number=phone,
             defaults={"state": "idle"},
         )
 
-        # ── Route based on current conversation state ──────────
+        # Route based on current conversation state
 
         if conv_state.state == "awaiting_issue":
-            # User was asked for their issue description
             _handle_booking_issue(phone, body, conv_state)
 
         elif conv_state.state == "awaiting_serial":
-            # User was asked for their serial number
             _handle_warranty_check(phone, body, conv_state)
 
         elif conv_state.state == "awaiting_job_id":
-            # User was asked for their Job ID
             _handle_track_request(phone, body, conv_state)
 
         elif body == "1":
-            # Book a Service — ask for issue description
             conv_state.state = "awaiting_issue"
             conv_state.save()
             send_whatsapp_message(phone, BOOKING_ASK_ISSUE)
 
         elif body == "2":
-            # Check Warranty — ask for serial number
             conv_state.state = "awaiting_serial"
             conv_state.save()
             send_whatsapp_message(phone, WARRANTY_ASK_SERIAL)
 
         elif body == "3":
-            # Track Request — ask for Job ID
             conv_state.state = "awaiting_job_id"
             conv_state.save()
             send_whatsapp_message(phone, TRACK_ASK_JOB_ID)
 
+        elif body == "4":
+            # Talk to Agent
+            conv_state.reset()
+            ConversationSession.objects.create(
+                customer=customer,
+                subject="General Inquiry (WhatsApp)",
+                status="open"
+            )
+            reply = (
+                "🧑‍💻 *Connecting you to an agent...*\n\n"
+                "You are now connected to our support team. An agent will reply shortly.\n\n"
+                "_(Type *EXIT* at any time to leave the chat)_"
+            )
+            send_whatsapp_message(phone, reply)
+
         elif body.lower() in ("hi", "hello", "hey", "menu", "start"):
-            # Greeting — send welcome menu
             conv_state.reset()
             send_whatsapp_message(phone, WELCOME_MESSAGE)
 
         else:
-            # Unknown input — send menu again
             conv_state.reset()
             send_whatsapp_message(phone, INVALID_INPUT)
 
-        # Always return 200 to Twilio
         return Response({"status": "received"}, status=http_status.HTTP_200_OK)
