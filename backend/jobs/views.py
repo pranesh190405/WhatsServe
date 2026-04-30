@@ -5,7 +5,7 @@ from rest_framework.response import Response
 
 from users.models import User, TechnicianProfile
 from feedback.models import Feedback
-from whatsapp.views import send_whatsapp_message
+from whatsapp.services import send_whatsapp_message
 from .models import Job, Warranty, JobAssignment, TechnicianReport, ConversationSession, ChatMessage
 from .serializers import (
     JobCreateSerializer,
