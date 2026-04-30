@@ -164,6 +164,26 @@ class AssignTechnicianView(APIView):
             # In a real system, you'd add quick reply buttons. For now, text.
             send_whatsapp_message(tech_phone, message)
 
+        # Notify customer via WhatsApp
+        customer_phone = job.customer.phone_number or job.customer.whatsapp_id
+        if customer_phone:
+            tech_name = technician.first_name or technician.username
+            try:
+                rating = technician.technician_profile.average_rating
+                rating_str = f"{rating}★" if rating > 0 else "New"
+            except Exception:
+                rating_str = "N/A"
+                
+            cust_message = (
+                f"✅ *Technician Assigned!*\n\n"
+                f"Job ID: `{job.job_id}`\n"
+                f"We have assigned a technician to your request.\n\n"
+                f"👨‍🔧 *{tech_name}*\n"
+                f"⭐ Rating: {rating_str}\n\n"
+                f"The technician will contact you shortly before arriving."
+            )
+            send_whatsapp_message(customer_phone, cust_message)
+
         detail = JobAssignmentSerializer(assignment)
         return Response(
             {
