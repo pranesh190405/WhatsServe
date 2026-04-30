@@ -16,6 +16,12 @@ class ConversationState(models.Model):
         ("awaiting_serial", "Awaiting serial number (Check Warranty)"),
         ("awaiting_auto_book", "Awaiting YES/NO to auto-book after warranty"),
         ("awaiting_job_id", "Awaiting Job ID (Track Request)"),
+        # Technician-specific states
+        ("tech_awaiting_response", "Technician awaiting ACCEPT/REJECT"),
+        ("tech_awaiting_otp", "Technician awaiting OTP to complete job"),
+        # Customer post-service states
+        ("customer_awaiting_feedback", "Customer awaiting rating feedback"),
+        ("customer_awaiting_comment", "Customer awaiting feedback comment"),
     )
 
     phone_number = models.CharField(
@@ -24,7 +30,7 @@ class ConversationState(models.Model):
         db_index=True,
         help_text="WhatsApp phone number (e.g. +919876543210)",
     )
-    state = models.CharField(max_length=30, choices=STATE_CHOICES, default="idle")
+    state = models.CharField(max_length=40, choices=STATE_CHOICES, default="idle")
     context = models.JSONField(
         default=dict,
         blank=True,

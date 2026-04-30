@@ -1,195 +1,62 @@
-import re
+"""
+Celery tasks for WhatsApp message processing.
+The main entry point is process_incoming_message which routes
+to the appropriate handler based on user role and conversation state.
+"""
 import logging
 from celery import shared_task
 from .models import ConversationState
 from users.models import User
-from jobs.models import Job, ConversationSession, ChatMessage, Warranty
+from jobs.models import Job, ConversationSession, ChatMessage
 from .services import send_whatsapp_message, analyze_intent
+from .handlers import (
+    WELCOME_MESSAGE, BOOKING_ASK_CATEGORY, BOOKING_ASK_ISSUE,
+    WARRANTY_ASK_SERIAL, TRACK_ASK_JOB_ID, INVALID_INPUT,
+    handle_booking_category, handle_booking_issue,
+    handle_warranty_check, handle_auto_book, handle_track_request,
+    handle_customer_feedback, handle_customer_comment,
+    handle_technician_message,
+)
 
 logger = logging.getLogger(__name__)
 
-# Templates
-WELCOME_MESSAGE = (
-    "👋 Welcome to *WhatsServe — Electronics Service Center*!\n\n"
-    "How can we help you today?\n\n"
-    "1️⃣ Book a Service\n"
-    "2️⃣ Check Warranty\n"
-    "3️⃣ Track Your Request\n"
-    "4️⃣ Talk to Agent\n\n"
-    "Reply with *1*, *2*, *3*, *4* or simply type your request!"
-)
-
-BOOKING_ASK_CATEGORY = (
-    "🔧 *Book a Service*\n\n"
-    "What type of appliance needs service?\n"
-    "_(e.g., Air Conditioner, Refrigerator, Washing Machine, TV)_"
-)
-
-BOOKING_ASK_ISSUE = (
-    "Great. Please describe the exact issue you're facing.\n"
-    "_(e.g., Not cooling, Screen blinking, Making a loud noise)_"
-)
-
-WARRANTY_ASK_SERIAL = (
-    "🛡️ *Check Warranty*\n\n"
-    "Please send us the *serial number* of your product.\n"
-    "You can find it on the back or bottom of the appliance."
-)
-
-TRACK_ASK_JOB_ID = (
-    "📋 *Track Your Request*\n\n"
-    "Please send your *Job ID* (or type *ALL* to see your recent requests).\n"
-    "It looks like: `JOB-20260429-0001`"
-)
-
-INVALID_INPUT = (
-    "❓ Sorry, I didn't understand that.\n\n"
-    "Please reply with *1*, *2*, *3*, or *4* to choose an option:\n\n"
-    "1️⃣ Book a Service\n"
-    "2️⃣ Check Warranty\n"
-    "3️⃣ Track Your Request\n"
-    "4️⃣ Talk to Agent"
-)
-
-
-def _handle_booking_category(phone, text, conv_state):
-    conv_state.context["category"] = text.strip()
-    conv_state.state = "awaiting_issue"
-    conv_state.save()
-    send_whatsapp_message(phone, BOOKING_ASK_ISSUE)
-
-def _handle_booking_issue(phone, text, conv_state):
-    customer = User.objects.get(phone_number=phone.replace("whatsapp:", ""))
-    category = conv_state.context.get("category", "General Appliance")
-
-    job = Job.objects.create(
-        title=f"{category[:40]} Repair",
-        description=text,
-        customer=customer,
-    )
-    conv_state.reset()
-
-    reply = (
-        f"✅ *Service booked successfully!*\n\n"
-        f"📋 Job ID: `{job.job_id}`\n"
-        f"📌 Status: Pending\n"
-        f"📝 Issue: {text[:100]}\n\n"
-        f"We'll assign a technician shortly and notify you via WhatsApp.\n\n"
-        f"Reply *3* anytime to track your request."
-    )
-    send_whatsapp_message(phone, reply)
-
-def _handle_warranty_check(phone, serial, conv_state):
-    cleaned_serial = re.sub(r'[^A-Za-z0-9]', '', serial).upper()
-
-    try:
-        warranty = Warranty.objects.get(serial_number__iexact=cleaned_serial)
-        if warranty.is_valid:
-            conv_state.state = "awaiting_auto_book"
-            conv_state.context["product_name"] = warranty.product_name
-            conv_state.save()
-            
-            reply = (
-                f"🛡️ *Warranty Status: ✅ Valid*\n\n"
-                f"Product: {warranty.product_name}\n"
-                f"Serial: `{warranty.serial_number}`\n"
-                f"Expires: {warranty.expiry_date.strftime('%d %b %Y')}\n\n"
-                f"Would you like to book a *FREE service visit* for this product right now? Reply *YES* or *NO*."
-            )
-        else:
-            conv_state.reset()
-            reply = (
-                f"🛡️ *Warranty Status: ❌ Expired*\n\n"
-                f"Product: {warranty.product_name}\n"
-                f"Serial: `{warranty.serial_number}`\n"
-                f"Expired on: {warranty.expiry_date.strftime('%d %b %Y')}\n\n"
-                f"Your warranty has expired. Service charges may apply. Reply *1* to book a service anyway."
-            )
-    except Warranty.DoesNotExist:
-        conv_state.reset()
-        reply = (
-            f"🛡️ *Warranty Status: ⚠️ Not Found*\n\n"
-            f"No warranty record found for serial number `{cleaned_serial}`.\n\n"
-            f"Please double-check the serial number on your appliance."
-        )
-
-    send_whatsapp_message(phone, reply)
-
-def _handle_auto_book(phone, text, conv_state):
-    if text.strip().upper() == "YES":
-        product_name = conv_state.context.get("product_name", "Appliance under Warranty")
-        conv_state.context["category"] = product_name
-        conv_state.state = "awaiting_issue"
-        conv_state.save()
-        send_whatsapp_message(phone, f"Booking service for your {product_name}.\n\n" + BOOKING_ASK_ISSUE)
-    else:
-        conv_state.reset()
-        send_whatsapp_message(phone, "No problem! Reply *hi* anytime to return to the main menu.")
-
-def _handle_track_request(phone, text, conv_state):
-    conv_state.reset()
-    clean_text = text.strip().upper()
-
-    if clean_text == "ALL":
-        jobs = Job.objects.filter(customer__phone_number=phone.replace("whatsapp:", "").replace("+", "")).order_by('-created_at')[:5]
-        if not jobs:
-            send_whatsapp_message(phone, "📋 No past or open service requests found for your number.")
-            return
-            
-        reply = "📋 *Your Recent Requests:*\n\n"
-        for j in jobs:
-            reply += f"• `{j.job_id}` — {j.get_status_display()}\n"
-        reply += "\nReply with a specific Job ID (e.g., `JOB-XXXXX`) for full details."
-        send_whatsapp_message(phone, reply)
-        return
-
-    try:
-        job = Job.objects.select_related("customer", "technician").get(
-            job_id__iexact=clean_text
-        )
-        technician_info = (
-            f"Technician: {job.technician.first_name or job.technician.username}"
-            if job.technician
-            else "Technician: Not yet assigned"
-        )
-        reply = (
-            f"📋 *Job Status: {job.get_status_display()}*\n\n"
-            f"Job ID: `{job.job_id}`\n"
-            f"Issue: {job.title}\n"
-            f"{technician_info}\n"
-            f"Created: {job.created_at.strftime('%d %b %Y, %I:%M %p')}\n"
-            f"Last Updated: {job.updated_at.strftime('%d %b %Y, %I:%M %p')}"
-        )
-    except Job.DoesNotExist:
-        reply = (
-            f"📋 *Job Not Found*\n\n"
-            f"No service request found for `{clean_text}`.\n\n"
-            f"Please check the Job ID and try again, or type *ALL*."
-        )
-
-    send_whatsapp_message(phone, reply)
+GREETING_WORDS = {"hi", "hello", "hey", "menu", "start", "restart", "home"}
 
 
 @shared_task
 def process_incoming_message(phone, body):
-    logger.info("Processing background message from %s: %s", phone, body)
-    
+    """
+    Main Celery task — routes incoming WhatsApp messages.
+    1. Detect if sender is a technician → technician flow
+    2. Check for active live chat → route to chat
+    3. Check conversation state → resume flow
+    4. If idle → parse intent via Gemini or fallback
+    """
+    logger.info("Processing message from %s: %s", phone, body)
+
+    # Get or create user
+    clean_phone = phone.replace("whatsapp:", "").replace("+", "")
     customer, _ = User.objects.get_or_create(
         phone_number=phone.replace("whatsapp:", ""),
         defaults={
-            "username": phone.replace("whatsapp:", "").replace("+", ""),
+            "username": clean_phone,
             "role": "customer",
         },
     )
 
-    # 1. Live Chat Intercept
+    # ─── 1. TECHNICIAN CHECK ───────────────────────────────
+    if customer.role == "technician":
+        return handle_technician_message(phone, body, customer)
+
+    # ─── 2. LIVE CHAT INTERCEPT ────────────────────────────
     active_chat = ConversationSession.objects.filter(
         customer=customer,
         status__in=["open", "assigned", "in_progress"]
     ).first()
 
     if active_chat:
-        if body.strip().upper() in ("EXIT", "HI", "HELLO", "HEY", "MENU", "START"):
+        clean_body = body.strip().upper()
+        if clean_body in ("EXIT", "HI", "HELLO", "HEY", "MENU", "START"):
             active_chat.status = "resolved"
             active_chat.save()
             ChatMessage.objects.create(
@@ -209,47 +76,67 @@ def process_incoming_message(phone, body):
         )
         return "routed_to_chat"
 
-    # 2. State Machine or GPT Logic
+    # ─── 3. STATE MACHINE ─────────────────────────────────
     conv_state, _ = ConversationState.objects.get_or_create(
         phone_number=phone,
         defaults={"state": "idle"},
     )
 
-    # If in a specific flow, handle it
-    if conv_state.state == "awaiting_category":
-        _handle_booking_category(phone, body, conv_state)
-        return "handled_category"
-    elif conv_state.state == "awaiting_issue":
-        _handle_booking_issue(phone, body, conv_state)
-        return "handled_issue"
-    elif conv_state.state == "awaiting_serial":
-        _handle_warranty_check(phone, body, conv_state)
-        return "handled_serial"
-    elif conv_state.state == "awaiting_auto_book":
-        _handle_auto_book(phone, body, conv_state)
-        return "handled_auto_book"
-    elif conv_state.state == "awaiting_job_id":
-        _handle_track_request(phone, body, conv_state)
-        return "handled_job_id"
+    state = conv_state.state
 
-    # 3. If idle, check for basic greetings or numbers first
+    if state == "awaiting_category":
+        handle_booking_category(phone, body, conv_state)
+        return "handled_category"
+    elif state == "awaiting_issue":
+        handle_booking_issue(phone, body, conv_state)
+        return "handled_issue"
+    elif state == "awaiting_serial":
+        handle_warranty_check(phone, body, conv_state)
+        return "handled_serial"
+    elif state == "awaiting_auto_book":
+        handle_auto_book(phone, body, conv_state)
+        return "handled_auto_book"
+    elif state == "awaiting_job_id":
+        handle_track_request(phone, body, conv_state)
+        return "handled_job_id"
+    elif state == "customer_awaiting_feedback":
+        handle_customer_feedback(phone, body, conv_state)
+        return "handled_feedback"
+    elif state == "customer_awaiting_comment":
+        handle_customer_comment(phone, body, conv_state)
+        return "handled_comment"
+
+    # ─── 4. IDLE — CHECK GREETINGS ────────────────────────
     clean_body = body.strip().lower()
-    if clean_body in ("hi", "hello", "hey", "menu", "start"):
+    if clean_body in GREETING_WORDS:
         conv_state.reset()
         send_whatsapp_message(phone, WELCOME_MESSAGE)
         return "welcome"
 
-    # 4. Use OpenAI GPT to parse intent
+    # ─── 5. SMART INTENT DETECTION (Gemini / Fallback) ────
     intent_data = analyze_intent(body)
     intent = intent_data.get("intent", "UNKNOWN")
+    logger.info("Detected intent: %s from body: %s", intent, body)
 
     if intent == "BOOK_SERVICE":
         cat = intent_data.get("category")
-        if cat:
+        issue = intent_data.get("issue")
+
+        if cat and issue:
+            # Both category and issue extracted — create job directly
             conv_state.context["category"] = cat
             conv_state.state = "awaiting_issue"
             conv_state.save()
-            send_whatsapp_message(phone, BOOKING_ASK_ISSUE)
+            handle_booking_issue(phone, issue, conv_state)
+        elif cat:
+            # Category found but no issue yet
+            conv_state.context["category"] = cat
+            conv_state.state = "awaiting_issue"
+            conv_state.save()
+            send_whatsapp_message(
+                phone,
+                f"Got it — booking service for your *{cat}*. 👍\n\n{BOOKING_ASK_ISSUE}"
+            )
         else:
             conv_state.state = "awaiting_category"
             conv_state.save()
@@ -260,7 +147,7 @@ def process_incoming_message(phone, body):
         if serial:
             conv_state.state = "awaiting_serial"
             conv_state.save()
-            _handle_warranty_check(phone, serial, conv_state)
+            handle_warranty_check(phone, serial, conv_state)
         else:
             conv_state.state = "awaiting_serial"
             conv_state.save()
@@ -271,7 +158,7 @@ def process_incoming_message(phone, body):
         if job_id:
             conv_state.state = "awaiting_job_id"
             conv_state.save()
-            _handle_track_request(phone, job_id, conv_state)
+            handle_track_request(phone, job_id, conv_state)
         else:
             conv_state.state = "awaiting_job_id"
             conv_state.save()
@@ -286,23 +173,25 @@ def process_incoming_message(phone, body):
         )
         reply = (
             "🧑‍💻 *Connecting you to an agent...*\n\n"
-            "You are now connected to our support team. An agent will reply shortly.\n\n"
+            "You are now connected to our support team. "
+            "An agent will reply shortly.\n\n"
             "_(Type *EXIT* at any time to leave the chat)_"
         )
         send_whatsapp_message(phone, reply)
 
     else:
-        # Fallback to invalid input message
+        # Unknown intent — show menu
         conv_state.reset()
         send_whatsapp_message(phone, INVALID_INPUT)
 
-    return "processed_via_gpt"
+    return "processed"
+
 
 @shared_task
 def expire_old_assignments():
     """
-    Cron job task to check for JobAssignments that passed their deadline.
-    Runs every 5 minutes.
+    Periodic task: check for JobAssignments past their deadline.
+    Runs every 5 minutes via Celery Beat.
     """
     from django.utils import timezone
     from jobs.models import JobAssignment
@@ -316,6 +205,5 @@ def expire_old_assignments():
         assignment.status = "expired"
         assignment.save()
         count += 1
-        # In a real app we might also notify support here
-        logger.info(f"Assignment {assignment.id} expired.")
+        logger.info("Assignment %s expired.", assignment.id)
     return f"Expired {count} assignments."

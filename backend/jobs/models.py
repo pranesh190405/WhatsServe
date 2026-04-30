@@ -56,6 +56,18 @@ class Job(models.Model):
         related_name="technician_jobs",
     )
 
+    completion_otp = models.CharField(
+        max_length=6,
+        blank=True,
+        default="",
+        help_text="OTP sent to customer for job completion verification",
+    )
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the job was actually completed (OTP verified)",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

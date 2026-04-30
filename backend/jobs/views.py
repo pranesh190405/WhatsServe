@@ -152,17 +152,30 @@ class AssignTechnicianView(APIView):
         job.status = "in_progress"
         job.save()
 
-        # Notify technician via WhatsApp
+        # Notify technician via WhatsApp and set their conversation state
         tech_phone = technician.phone_number or technician.whatsapp_id
         if tech_phone:
             message = (
                 f"🔧 *New Job Assigned: {job.job_id}*\n\n"
                 f"Title: {job.title}\n"
-                f"Customer: {job.customer.username}\n\n"
-                f"You have 30 minutes to accept or reject this assignment."
+                f"Issue: {job.description[:100]}\n"
+                f"Customer: {job.customer.first_name or job.customer.username}\n\n"
+                f"⏰ You have *30 minutes* to respond.\n\n"
+                f"Reply *ACCEPT* to accept this job\n"
+                f"Reply *REJECT <reason>* to decline"
             )
-            # In a real system, you'd add quick reply buttons. For now, text.
             send_whatsapp_message(tech_phone, message)
+
+            # Set technician's conversation state to await response
+            from whatsapp.models import ConversationState
+            wa_phone = tech_phone if tech_phone.startswith("whatsapp:") else f"whatsapp:{tech_phone}"
+            conv_state, _ = ConversationState.objects.get_or_create(
+                phone_number=wa_phone,
+                defaults={"state": "idle"},
+            )
+            conv_state.state = "tech_awaiting_response"
+            conv_state.context = {"assignment_id": assignment.id, "job_id": job.job_id}
+            conv_state.save()
 
         # Notify customer via WhatsApp
         customer_phone = job.customer.phone_number or job.customer.whatsapp_id
