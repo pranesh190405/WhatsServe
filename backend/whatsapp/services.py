@@ -1,7 +1,8 @@
 import os
 import json
 import logging
-from openai import OpenAI
+from google import genai
+from google.genai import types
 from twilio.rest import Client
 
 logger = logging.getLogger(__name__)
@@ -48,19 +49,19 @@ def send_whatsapp_message(to, text):
         return None
 
 # Initialize client lazily
-_openai_client = None
+_gemini_client = None
 
-def get_openai_client():
-    global _openai_client
-    if _openai_client is None:
-        api_key = os.getenv("OPENAI_API_KEY")
-        if api_key and api_key != "your-openai-api-key-here":
-            _openai_client = OpenAI(api_key=api_key)
-    return _openai_client
+def get_gemini_client():
+    global _gemini_client
+    if _gemini_client is None:
+        api_key = os.getenv("GEMINI_API_KEY")
+        if api_key and api_key != "your-gemini-api-key-here":
+            _gemini_client = genai.Client(api_key=api_key)
+    return _gemini_client
 
 def analyze_intent(user_text):
     """
-    Analyzes the user's text using OpenAI to determine their intent.
+    Analyzes the user's text using Gemini to determine their intent.
     Returns a dict like:
     {
         "intent": "BOOK_SERVICE" | "CHECK_WARRANTY" | "TRACK_REQUEST" | "TALK_TO_AGENT" | "UNKNOWN",
@@ -69,36 +70,44 @@ def analyze_intent(user_text):
         "job_id": "job id if found" | null
     }
     """
-    client = get_openai_client()
+    client = get_gemini_client()
     
-    # Fallback if OpenAI is not configured
+    # Fallback if Gemini is not configured
     if not client:
-        logger.warning("OpenAI client not configured. Falling back to keyword matching.")
+        logger.warning("Gemini client not configured. Falling back to keyword matching.")
         return _fallback_intent_analyzer(user_text)
 
+    prompt = f"""
+    You are a smart router for an electronics after-sales service WhatsApp bot.
+    Determine the user's intent and extract any relevant entities.
+    Valid intents are: BOOK_SERVICE, CHECK_WARRANTY, TRACK_REQUEST, TALK_TO_AGENT, UNKNOWN.
+    
+    User message: "{user_text}"
+    """
+
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a smart router for an electronics after-sales service WhatsApp bot. "
-                        "Determine the user's intent and extract any relevant entities. "
-                        "Valid intents are: BOOK_SERVICE, CHECK_WARRANTY, TRACK_REQUEST, TALK_TO_AGENT, UNKNOWN. "
-                        "Return ONLY valid JSON in this format: "
-                        "{\"intent\": \"INTENT_NAME\", \"category\": \"appliance type if applicable\", \"serial\": \"serial number if applicable\", \"job_id\": \"job id if applicable\"}"
-                    )
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema={
+                    "type": "OBJECT",
+                    "properties": {
+                        "intent": {"type": "STRING"},
+                        "category": {"type": "STRING", "nullable": True},
+                        "serial": {"type": "STRING", "nullable": True},
+                        "job_id": {"type": "STRING", "nullable": True}
+                    },
+                    "required": ["intent"]
                 },
-                {"role": "user", "content": user_text}
-            ],
-            response_format={ "type": "json_object" },
-            temperature=0.0,
+                temperature=0.0
+            )
         )
-        content = response.choices[0].message.content
+        content = response.text
         return json.loads(content)
     except Exception as e:
-        logger.error(f"OpenAI error: {e}")
+        logger.error(f"Gemini error: {e}")
         return _fallback_intent_analyzer(user_text)
 
 def _fallback_intent_analyzer(text):
