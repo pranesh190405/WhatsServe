@@ -1,3 +1,5 @@
+import { logout } from '../services/api'
+
 export default function Topbar({ activePage }) {
   return (
     <header
@@ -49,19 +51,21 @@ export default function Topbar({ activePage }) {
           <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[var(--color-danger)]" style={{ animation: 'pulse-glow 2s infinite' }} />
         </button>
 
-        {/* Avatar */}
+        {/* Avatar / Logout */}
         <button
           id="btn-avatar"
+          onClick={logout}
+          title="Sign Out"
           className="
             w-8 h-8 rounded-full
             bg-gradient-to-br from-[var(--color-accent)] to-[#a78bfa]
             flex items-center justify-center
             text-white text-xs font-bold
             cursor-pointer border-2 border-transparent
-            hover:border-[var(--color-accent-hover)] transition-colors duration-200
+            hover:border-[var(--color-danger)] transition-colors duration-200
           "
         >
-          P
+          S
         </button>
       </div>
     </header>
